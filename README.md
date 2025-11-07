@@ -7,7 +7,7 @@ A drop-in replacement for Python’s builtin [`configparser.ConfigParser`](https
 ## Installation
 
 ```bash
-pip install auto_config_parser
+pip install git+https://github.com/rhhayward/auto_config_parser.git@main
 ```
 
 ## Quick-start

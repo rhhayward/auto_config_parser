@@ -48,7 +48,10 @@ class AutoConfigParser(configparser.ConfigParser):
         super().__init__(*args, **kwargs)
         self._file_path = Path(path).expanduser().resolve()
         if not self._file_path.exists():  # create empty file if missing
-            self._file_path.touch()
+            try:
+                self._file_path.touch()
+            except Exception as e:
+                pass
 
         self._lock = threading.RLock()
 
