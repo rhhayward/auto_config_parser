@@ -31,6 +31,9 @@ class _ConfigFileChangeHandler(FileSystemEventHandler):
         ):
             self._parser._reload_from_disk()
 
+    def on_deleted(self, event):  # type: ignore[override]
+        self._parser._reload_from_disk()
+
 
 class AutoConfigParser(configparser.ConfigParser):
     """A drop-in replacement for ``configparser.ConfigParser`` with auto-reload.
@@ -46,6 +49,7 @@ class AutoConfigParser(configparser.ConfigParser):
 
     def __init__(self, path: Union[str, Path], *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self._original_path = path
         self._file_path = Path(path).expanduser().resolve()
         if not self._file_path.exists():  # create empty file if missing
             try:
@@ -62,6 +66,7 @@ class AutoConfigParser(configparser.ConfigParser):
         self._observer = Observer()
         handler = _ConfigFileChangeHandler(self)
         self._observer.schedule(handler, self._file_path.parent.as_posix(), recursive=False)
+        self._observer.schedule(handler, path, recursive=False)
         self._observer.daemon = True
         self._observer.start()
 
@@ -92,6 +97,7 @@ class AutoConfigParser(configparser.ConfigParser):
         with self._lock:
             # Clear current data and re-read file.
             super().clear()
+            self._file_path = Path(self._original_path).expanduser().resolve()
             super().read(self._file_path, encoding="utf-8")
 
     # ------------------------------------------------------------------
@@ -100,9 +106,9 @@ class AutoConfigParser(configparser.ConfigParser):
     # We override methods that *read* data to guarantee fresh view. Write
     # operations will internally update the file (if write is called) but chrono
     # isn't critical.
-    def get(self, section: str, option: str, *args: Any, **kwargs: Any):  # type: ignore[override]
-        self._reload_from_disk()
-        return super().get(section, option, *args, **kwargs)
+    #def get(self, section: str, option: str, *args: Any, **kwargs: Any):  # type: ignore[override]
+    #    #self._reload_from_disk()
+    #    return super().get(section, option, *args, **kwargs)
 
     # NOTE: We intentionally avoid overriding methods such as ``sections`` or
     # ``items`` that are internally used by ``configparser`` during mutation
