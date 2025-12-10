@@ -25,6 +25,7 @@ class _ConfigFileChangeHandler(FileSystemEventHandler):
         self._parser = parser
 
     def on_modified(self, event):  # type: ignore[override]
+        ### detect modification of only the target file
         if (
             not event.is_directory
             and Path(event.src_path).resolve() == self._parser._file_path
@@ -32,8 +33,8 @@ class _ConfigFileChangeHandler(FileSystemEventHandler):
             self._parser._reload_from_disk()
 
     def on_deleted(self, event):  # type: ignore[override]
+        ### detect deletion of anything, file or directory
         self._parser._reload_from_disk()
-
 
 class AutoConfigParser(configparser.ConfigParser):
     """A drop-in replacement for ``configparser.ConfigParser`` with auto-reload.
@@ -50,7 +51,7 @@ class AutoConfigParser(configparser.ConfigParser):
     def __init__(self, path: Union[str, Path], *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._original_path = path
-        self._file_path = Path(path).expanduser().resolve()
+        self._file_path = Path(self._original_path).expanduser().resolve()
         if not self._file_path.exists():  # create empty file if missing
             try:
                 self._file_path.touch()
@@ -58,17 +59,10 @@ class AutoConfigParser(configparser.ConfigParser):
                 pass
 
         self._lock = threading.RLock()
+        self.handler = _ConfigFileChangeHandler(self)
 
         # initial load
         self._reload_from_disk()
-
-        # start watchdog observer
-        self._observer = Observer()
-        handler = _ConfigFileChangeHandler(self)
-        self._observer.schedule(handler, self._file_path.parent.as_posix(), recursive=False)
-        self._observer.schedule(handler, path, recursive=False)
-        self._observer.daemon = True
-        self._observer.start()
 
     # ------------------------------------------------------------------
     # Public helpers
@@ -95,9 +89,28 @@ class AutoConfigParser(configparser.ConfigParser):
     def _reload_from_disk(self) -> None:
         """Reload the configuration from disk in a thread-safe manner."""
         with self._lock:
-            # Clear current data and re-read file.
+            # Clear current data
             super().clear()
+            # re-resolve path
             self._file_path = Path(self._original_path).expanduser().resolve()
+            # identify everything to watch
+            what_to_watch = [part for part in Path(self._original_path).parents if part.is_symlink()]
+            what_to_watch.append(self._file_path.parent)
+            what_to_watch.append(self._original_path)
+
+            # unschedule and reschedule to handle file recreation
+            if getattr(self, "_observer", None) is not None:
+                self._observer.unschedule_all()
+                for item in what_to_watch:
+                    self._observer.schedule(self.handler, item.as_posix(), recursive=False)
+
+            else:
+                self._observer = Observer()
+                for item in what_to_watch:
+                    self._observer.schedule(self.handler, item.as_posix(), recursive=False)
+                self._observer.daemon = True
+                self._observer.start()
+
             super().read(self._file_path, encoding="utf-8")
 
     # ------------------------------------------------------------------
