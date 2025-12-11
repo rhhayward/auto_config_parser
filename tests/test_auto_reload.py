@@ -160,3 +160,16 @@ def test_auto_reload_from_recreated_symlinked_directory(tmp_path):
         pytest.fail("Parser did not reflect updated value from new target within timeout")
 
     assert parser.get("app", "mode", fallback=None) == "production"
+
+def test_auto_reload_where_passed_in_object_is_str(tmp_path):
+    """AutoConfigParser should accept file path as string and reflect updates."""
+    ini_path = tmp_path / "config.ini"
+
+    # 1. write initial config
+    ini_path.write_text("""[feature]\nenabled = false\n""", encoding="utf-8")
+
+    # 2. read value via AutoConfigParser using string path
+    parser = AutoConfigParser(str(ini_path))
+    assert parser.getboolean("feature", "enabled", fallback=None) is False
+
+    parser.close()

@@ -50,7 +50,7 @@ class AutoConfigParser(configparser.ConfigParser):
 
     def __init__(self, path: Union[str, Path], *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self._original_path = path
+        self._original_path = Path(path) if isinstance(path, str) else path
         self._file_path = Path(self._original_path).expanduser().resolve()
         if not self._file_path.exists():  # create empty file if missing
             try:
